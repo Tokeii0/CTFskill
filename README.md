@@ -176,4 +176,4 @@ MIT License - 仅用于 CTF 比赛和安全学习研究
 
 ---
 
-**开始使用**: 直接在 Claude 中说 "这是一道 CTF Misc 题" 即可触发 Skill！
+**开始使用**: 直接在 AIIDE 中说 "这是一道 CTF Misc 题" 即可触发 Skill！
