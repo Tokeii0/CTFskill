@@ -587,6 +587,159 @@ if __name__ == '__main__':
     fix_zip_header(sys.argv[1])
 ```
 
+## 无工具替代方案
+
+当没有专业密码爆破工具时：
+
+### Python 标准库 (zipfile)
+
+```python
+#!/usr/bin/env python3
+"""纯 Python 压缩包分析"""
+
+import zipfile
+import struct
+
+# 1. 查看压缩包信息 (替代 unzip -l)
+def list_zip(filename):
+    with zipfile.ZipFile(filename) as zf:
+        for info in zf.infolist():
+            print(f"File: {info.filename}")
+            print(f"  Size: {info.file_size} bytes")
+            print(f"  Compressed: {info.compress_size} bytes")
+            print(f"  CRC32: {info.CRC:08x}")
+            print(f"  Date: {info.date_time}")
+            if info.flag_bits & 0x1:
+                print("  [ENCRYPTED]")
+
+# 2. 简单密码尝试 (替代 fcrackzip)
+def try_passwords(filename, passwords):
+    with zipfile.ZipFile(filename) as zf:
+        for pwd in passwords:
+            try:
+                zf.extractall(pwd=pwd.encode())
+                print(f"[+] Password found: {pwd}")
+                return pwd
+            except:
+                pass
+    print("[-] Password not found")
+    return None
+
+# 常见密码列表
+common_passwords = [
+    '', '123456', 'password', 'admin', 'root',
+    'ctf', 'flag', 'key', '000000', '123123',
+    'qwerty', '123qwe', 'admin123', '1234567890'
+]
+
+# 3. 伪加密检测与修复
+def fix_fake_encrypt(filename):
+    with open(filename, 'rb') as f:
+        data = bytearray(f.read())
+    
+    # 查找并修复 Local File Header
+    pos = 0
+    fixed = False
+    while True:
+        pos = data.find(b'PK\x03\x04', pos)
+        if pos == -1:
+            break
+        # General purpose bit flag at offset +6
+        if data[pos + 6] & 0x01:
+            data[pos + 6] &= 0xFE
+            fixed = True
+        pos += 4
+    
+    # 查找并修复 Central Directory
+    pos = 0
+    while True:
+        pos = data.find(b'PK\x01\x02', pos)
+        if pos == -1:
+            break
+        if data[pos + 8] & 0x01:
+            data[pos + 8] &= 0xFE
+            fixed = True
+        pos += 4
+    
+    if fixed:
+        with open('fixed_' + filename, 'wb') as f:
+            f.write(data)
+        print(f"[+] Fixed: fixed_{filename}")
+    else:
+        print("[-] No fake encryption detected")
+
+# 4. CRC32 碰撞 (小文件爆破)
+import binascii
+import itertools
+import string
+
+def crack_crc32(target_crc, max_len=4, charset=string.ascii_letters + string.digits):
+    for length in range(1, max_len + 1):
+        print(f"[*] Trying length {length}...")
+        for attempt in itertools.product(charset, repeat=length):
+            data = ''.join(attempt).encode()
+            if (binascii.crc32(data) & 0xffffffff) == target_crc:
+                print(f"[+] Found: {data.decode()}")
+                return data.decode()
+    return None
+```
+
+### 在线工具替代
+
+```yaml
+密码爆破:
+  - 暂无可靠在线爆破（安全原因）
+  - 可用 Python 脚本替代
+
+ZIP 分析:
+  - https://www.online-utility.org/file/analyze.jsp
+  - 本地 Python zipfile 模块
+
+在线解压:
+  - https://extract.me/ - 在线解压
+  - https://www.ezyzip.com/ - 在线 ZIP 工具
+```
+
+### 系统自带命令
+
+```bash
+# 列出内容 (通常系统自带)
+unzip -l archive.zip
+tar -tzf archive.tar.gz
+
+# 尝试解压
+unzip archive.zip
+tar -xzf archive.tar.gz
+
+# 查看 ZIP 结构
+zipinfo archive.zip
+
+# 简单字符串搜索
+strings archive.zip | grep -i password
+strings archive.zip | grep -i flag
+
+# 手工十六进制查看加密标志
+xxd archive.zip | head -20
+# 查看偏移 +6 位置的加密标志
+```
+
+### 纯手工修复伪加密
+
+```bash
+# 1. 用 xxd 查看
+xxd archive.zip | head -5
+# 找到 504b 0304 (Local File Header)
+# 偏移 +6 位置如果是 09 00 表示加密
+
+# 2. 用 sed 或 Python 修改
+# 将加密标志位清零
+python3 -c "
+data = bytearray(open('archive.zip', 'rb').read())
+data[6] = data[6] & 0xFE  # 清除加密位
+open('fixed.zip', 'wb').write(data)
+"
+```
+
 ## 工具速查
 
 ```bash

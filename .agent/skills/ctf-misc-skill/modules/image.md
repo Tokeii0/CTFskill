@@ -377,6 +377,108 @@ magnitude = 20*np.log(cv2.magnitude(dft_shift[:,:,0], dft_shift[:,:,1]))
 cv2.imwrite('fft_magnitude.png', magnitude)
 ```
 
+## 无工具替代方案
+
+当没有专业隐写工具时，可以使用以下方法：
+
+### 纯 Python 替代
+
+```python
+#!/usr/bin/env python3
+"""无工具依赖的图片分析"""
+
+# 1. 文件头检查 (替代 file 命令)
+def check_magic(filename):
+    magic_bytes = {
+        b'\x89PNG\r\n\x1a\n': 'PNG',
+        b'\xff\xd8\xff': 'JPEG',
+        b'GIF87a': 'GIF87a',
+        b'GIF89a': 'GIF89a',
+        b'BM': 'BMP',
+    }
+    with open(filename, 'rb') as f:
+        header = f.read(10)
+        for magic, fmt in magic_bytes.items():
+            if header.startswith(magic):
+                return fmt
+    return 'Unknown'
+
+# 2. 字符串提取 (替代 strings 命令)
+def extract_strings(filename, min_len=4):
+    with open(filename, 'rb') as f:
+        data = f.read()
+    result = []
+    current = []
+    for byte in data:
+        if 32 <= byte < 127:
+            current.append(chr(byte))
+        else:
+            if len(current) >= min_len:
+                result.append(''.join(current))
+            current = []
+    return result
+
+# 3. 文件尾追加检测 (替代 binwalk)
+def check_appended_data(filename):
+    with open(filename, 'rb') as f:
+        data = f.read()
+    # 检查 PNG 结尾后是否有额外数据
+    png_end = data.find(b'IEND') + 8
+    if png_end < len(data) - 4:
+        print(f"[!] Found {len(data) - png_end} bytes after PNG end")
+        return data[png_end:]
+    return None
+
+# 4. 简单 LSB 提取 (替代 zsteg)
+from PIL import Image
+def extract_lsb(filename):
+    img = Image.open(filename)
+    pixels = list(img.getdata())
+    bits = ''.join(str(p[0] & 1) for p in pixels if isinstance(p, tuple))
+    chars = [chr(int(bits[i:i+8], 2)) for i in range(0, len(bits)-8, 8)]
+    return ''.join(c for c in chars if 32 <= ord(c) < 127)
+
+# 5. EXIF 读取 (替代 exiftool - 需要 PIL)
+from PIL.ExifTags import TAGS
+def read_exif(filename):
+    img = Image.open(filename)
+    exif = img._getexif()
+    if exif:
+        for tag_id, value in exif.items():
+            tag = TAGS.get(tag_id, tag_id)
+            print(f"{tag}: {value}")
+```
+
+### 在线工具替代
+
+```yaml
+图片分析:
+  - https://www.aperisolve.com/ - 自动分析隐写
+  - https://29a.ch/photo-forensics/ - 图片取证
+  - https://stegonline.net/ - 在线 LSB 分析
+
+元数据:
+  - https://exifdata.com/ - 在线 EXIF 查看
+  - https://www.metadata2go.com/ - 元数据提取
+
+二维码:
+  - https://zxing.org/w/decode.jspx - 二维码解码
+  - https://online-barcode-reader.inliteresearch.com/ - 条形码
+```
+
+### Hex 编辑器替代
+
+```bash
+# 使用 Python 查看十六进制
+python3 -c "print(open('image.png','rb').read()[:100].hex())"
+
+# 或使用 xxd (通常系统自带)
+xxd image.png | head -20
+
+# Windows PowerShell
+Format-Hex -Path image.png | Select-Object -First 20
+```
+
 ## 工具速查
 
 ```bash

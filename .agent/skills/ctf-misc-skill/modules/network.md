@@ -101,6 +101,105 @@ tshark -r traffic.pcap -q -z follow,tcp,ascii,0
 
 详见 `scripts/usb_keyboard.py`
 
+## 无工具替代方案
+
+当没有 Wireshark/tshark 时：
+
+### 纯 Python 替代 (使用 scapy)
+
+```python
+#!/usr/bin/env python3
+"""使用 scapy 分析 pcap（pip install scapy）"""
+
+from scapy.all import *
+
+# 读取 pcap
+packets = rdpcap('traffic.pcap')
+
+# 1. 基础统计
+print(f"Total packets: {len(packets)}")
+
+# 2. 提取 HTTP 数据
+for pkt in packets:
+    if pkt.haslayer('Raw'):
+        payload = pkt['Raw'].load
+        if b'HTTP' in payload or b'GET' in payload or b'POST' in payload:
+            print(payload.decode('utf-8', errors='ignore'))
+
+# 3. 提取所有字符串
+for pkt in packets:
+    if pkt.haslayer('Raw'):
+        data = pkt['Raw'].load
+        # 搜索 flag
+        if b'flag' in data.lower():
+            print(f"[+] Found in packet: {data}")
+
+# 4. TCP 流重组
+sessions = packets.sessions()
+for session, pkts in sessions.items():
+    data = b''.join(bytes(p['Raw'].load) for p in pkts if p.haslayer('Raw'))
+    if b'flag' in data.lower():
+        print(f"[+] Session {session}: {data}")
+```
+
+### 无依赖 Python (手动解析)
+
+```python
+#!/usr/bin/env python3
+"""无依赖 pcap 解析（仅适用于简单情况）"""
+
+def parse_pcap_simple(filename):
+    """简单提取 pcap 中的字符串"""
+    with open(filename, 'rb') as f:
+        data = f.read()
+    
+    # 提取可打印字符串
+    result = []
+    current = []
+    for byte in data:
+        if 32 <= byte < 127:
+            current.append(chr(byte))
+        else:
+            if len(current) >= 10:
+                s = ''.join(current)
+                if 'flag' in s.lower() or 'http' in s.lower():
+                    result.append(s)
+            current = []
+    return result
+
+# 使用
+strings = parse_pcap_simple('traffic.pcap')
+for s in strings:
+    print(s)
+```
+
+### 在线工具替代
+
+```yaml
+PCAP 分析:
+  - https://apackets.com/ - 在线 PCAP 分析
+  - https://www.cloudshark.org/ - 云端 Wireshark
+  - https://packettotal.com/ - 流量分析
+
+文件提取:
+  - 将 pcap 上传到在线分析工具
+  - 使用 NetworkMiner (Windows GUI)
+```
+
+### 系统自带命令
+
+```bash
+# tcpdump (通常预装)
+tcpdump -r traffic.pcap -A | grep -i flag
+tcpdump -r traffic.pcap -X | head -100
+
+# 字符串搜索
+strings traffic.pcap | grep -iE "flag|password|user"
+
+# hexdump 查看
+hexdump -C traffic.pcap | head -50
+```
+
 ## Wireshark 过滤器速查
 
 ```

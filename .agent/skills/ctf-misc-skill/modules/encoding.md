@@ -114,6 +114,147 @@ for shift in range(26):
   - 古典密码专家
   - 支持频率分析
 
+## 无工具替代方案
+
+编码解码完全可以用 Python 标准库完成：
+
+### Python 标准库
+
+```python
+#!/usr/bin/env python3
+"""纯 Python 标准库编码解码"""
+
+import base64
+import codecs
+import urllib.parse
+import html
+import binascii
+
+# 1. Base64 系列
+def decode_base64(data):
+    try:
+        return base64.b64decode(data).decode('utf-8', errors='ignore')
+    except:
+        return None
+
+def decode_base32(data):
+    try:
+        return base64.b32decode(data).decode('utf-8', errors='ignore')
+    except:
+        return None
+
+# 2. Hex
+def decode_hex(data):
+    try:
+        return bytes.fromhex(data.replace(' ', '')).decode('utf-8', errors='ignore')
+    except:
+        return None
+
+# 3. Binary
+def decode_binary(data):
+    try:
+        binary = data.replace(' ', '')
+        chars = [chr(int(binary[i:i+8], 2)) for i in range(0, len(binary), 8)]
+        return ''.join(chars)
+    except:
+        return None
+
+# 4. ROT13
+def decode_rot13(data):
+    return codecs.decode(data, 'rot_13')
+
+# 5. Caesar 全枚举
+def caesar_all(data):
+    results = []
+    for shift in range(26):
+        result = ''
+        for c in data:
+            if c.isalpha():
+                base = ord('A') if c.isupper() else ord('a')
+                result += chr((ord(c) - base + shift) % 26 + base)
+            else:
+                result += c
+        results.append((shift, result))
+    return results
+
+# 6. URL 解码
+def decode_url(data):
+    return urllib.parse.unquote(data)
+
+# 7. HTML 实体
+def decode_html(data):
+    return html.unescape(data)
+
+# 8. 递归自动解码
+def auto_decode(data, depth=0, max_depth=10):
+    if depth > max_depth:
+        return data
+    
+    # 尝试各种解码
+    decoders = [
+        ('base64', decode_base64),
+        ('base32', decode_base32),
+        ('hex', decode_hex),
+        ('url', decode_url),
+        ('html', decode_html),
+        ('rot13', decode_rot13),
+    ]
+    
+    for name, func in decoders:
+        result = func(data)
+        if result and result != data:
+            print(f"[{depth}] {name}: {result[:50]}...")
+            # 如果看起来还像编码，继续递归
+            if any(c.isalpha() for c in result):
+                return auto_decode(result, depth + 1)
+            return result
+    
+    return data
+
+# 使用
+if __name__ == '__main__':
+    import sys
+    data = sys.argv[1] if len(sys.argv) > 1 else input("Enter encoded data: ")
+    result = auto_decode(data)
+    print(f"\n[Result] {result}")
+```
+
+### 在线工具替代
+
+```yaml
+万能工具:
+  - https://gchq.github.io/CyberChef/ - 最强推荐，支持 Magic 自动识别
+  - https://www.dcode.fr/ - 古典密码专家
+
+Base 系列:
+  - https://www.base64decode.org/ - Base64
+  - https://emn178.github.io/online-tools/base32_decode.html - Base32
+
+其他编码:
+  - https://www.rapidtables.com/convert/number/hex-to-ascii.html - Hex
+  - https://morsedecoder.com/ - 摩尔斯
+  - https://www.rot13.com/ - ROT13
+```
+
+### 命令行快速解码
+
+```bash
+# Base64
+echo "SGVsbG8=" | base64 -d
+
+# Hex
+echo "48656c6c6f" | xxd -r -p
+
+# ROT13
+echo "Uryyb" | tr 'A-Za-z' 'N-ZA-Mn-za-m'
+
+# URL 解码
+python3 -c "import urllib.parse; print(urllib.parse.unquote('Hello%20World'))"
+
+# 二进制转文本
+python3 -c "print(''.join(chr(int(b,2)) for b in '01001000 01101001'.split()))"
+```
+
 ## 脚本参考
 
 详见 `scripts/decode_multilayer.py`

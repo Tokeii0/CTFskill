@@ -471,6 +471,132 @@ plt.plot(t, energy)
 plt.savefig('freq_energy.png')
 ```
 
+## 无工具替代方案
+
+当没有 Audacity、sox 等专业工具时：
+
+### 纯 Python 替代
+
+```python
+#!/usr/bin/env python3
+"""无工具依赖的音频分析"""
+
+import wave
+import struct
+
+# 1. 音频信息读取 (替代 mediainfo)
+def audio_info(filename):
+    with wave.open(filename, 'rb') as wav:
+        print(f"Channels: {wav.getnchannels()}")
+        print(f"Sample Width: {wav.getsampwidth()} bytes")
+        print(f"Frame Rate: {wav.getframerate()} Hz")
+        print(f"Frames: {wav.getnframes()}")
+        print(f"Duration: {wav.getnframes() / wav.getframerate():.2f} seconds")
+
+# 2. 字符串提取
+def extract_strings(filename, min_len=4):
+    with open(filename, 'rb') as f:
+        data = f.read()
+    result = []
+    current = []
+    for byte in data:
+        if 32 <= byte < 127:
+            current.append(chr(byte))
+        else:
+            if len(current) >= min_len:
+                result.append(''.join(current))
+            current = []
+    return [s for s in result if 'flag' in s.lower() or 'ctf' in s.lower()]
+
+# 3. LSB 提取
+def extract_audio_lsb(filename):
+    with wave.open(filename, 'rb') as wav:
+        frames = wav.readframes(wav.getnframes())
+    # 16-bit audio
+    samples = struct.unpack(f'{len(frames)//2}h', frames)
+    lsb_bits = ''.join(str(s & 1) for s in samples)
+    # 转字节
+    chars = []
+    for i in range(0, len(lsb_bits) - 8, 8):
+        byte = int(lsb_bits[i:i+8], 2)
+        if 32 <= byte < 127:
+            chars.append(chr(byte))
+    return ''.join(chars)
+
+# 4. 简单频谱图 (需要 matplotlib, numpy)
+def simple_spectrogram(filename):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    with wave.open(filename, 'rb') as wav:
+        frames = wav.readframes(wav.getnframes())
+        rate = wav.getframerate()
+    
+    data = np.frombuffer(frames, dtype=np.int16)
+    
+    plt.figure(figsize=(12, 4))
+    plt.specgram(data, Fs=rate, cmap='inferno')
+    plt.xlabel('Time')
+    plt.ylabel('Frequency')
+    plt.savefig('spectrogram.png', dpi=150)
+    print("[+] Saved spectrogram.png")
+
+# 5. 声道分离
+def split_channels(filename):
+    with wave.open(filename, 'rb') as wav:
+        channels = wav.getnchannels()
+        if channels != 2:
+            print("Not stereo")
+            return
+        
+        frames = wav.readframes(wav.getnframes())
+        samples = struct.unpack(f'{len(frames)//2}h', frames)
+        
+        left = samples[0::2]
+        right = samples[1::2]
+        
+        # 保存左声道
+        with wave.open('left.wav', 'wb') as out:
+            out.setnchannels(1)
+            out.setsampwidth(wav.getsampwidth())
+            out.setframerate(wav.getframerate())
+            out.writeframes(struct.pack(f'{len(left)}h', *left))
+        
+        print("[+] Saved left.wav and right.wav")
+```
+
+### 在线工具替代
+
+```yaml
+频谱图:
+  - https://academo.org/demos/spectrum-analyzer/ - 在线频谱分析
+  - https://www.sonicvisualiser.org/download.html - 如果可以下载
+
+摩尔斯电码:
+  - https://morsecode.world/international/decoder/audio-decoder-adaptive.html
+  - https://morsecode.me/
+
+SSTV:
+  - 使用手机 App: Robot36, SSTV Slow Scan TV
+  - 播放音频让 App 解码
+
+DTMF:
+  - http://dialabc.com/sound/detect/ - 在线检测
+```
+
+### 系统自带命令
+
+```bash
+# 文件类型
+file audio.wav
+
+# 字符串搜索
+strings audio.wav | grep -i flag
+
+# 如果有 ffmpeg (很多系统预装)
+ffmpeg -i audio.wav 2>&1 | head -20
+```
+
 ## 工具速查
 
 ```bash

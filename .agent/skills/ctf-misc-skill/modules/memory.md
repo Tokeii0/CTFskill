@@ -130,6 +130,109 @@ linux.bash.Bash           # Bash 历史
 5. **屏幕截图** → `screenshot` 恢复屏幕画面
 6. **浏览器历史** → 提取浏览器进程内存
 
+## 无工具替代方案
+
+当没有 Volatility 时：
+
+### strings + grep (最有效)
+
+```bash
+# 直接搜索 flag（优先尝试）
+strings memory.raw | grep -iE "flag\{|ctf\{|key\{" | head -20
+strings -e l memory.raw | grep -iE "flag|ctf"  # 小端序 Unicode
+strings -e b memory.raw | grep -iE "flag|ctf"  # 大端序 Unicode
+
+# 搜索常见敏感信息
+strings memory.raw | grep -iE "password|passwd|pwd"
+strings memory.raw | grep -iE "admin|root|user"
+strings memory.raw | grep -E "[A-Za-z0-9+/]{40,}={0,2}"  # Base64
+
+# 搜索文件路径
+strings memory.raw | grep -iE "Desktop|Documents|flag\.txt"
+
+# 搜索 URL
+strings memory.raw | grep -iE "http://|https://"
+
+# 搜索 IP 地址
+strings memory.raw | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"
+```
+
+### Python 脚本替代
+
+```python
+#!/usr/bin/env python3
+"""无 Volatility 的内存分析"""
+
+import re
+import mmap
+
+def search_memory(filename, patterns):
+    """在内存镜像中搜索模式"""
+    with open(filename, 'rb') as f:
+        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        
+        for pattern in patterns:
+            regex = re.compile(pattern.encode())
+            for match in regex.finditer(mm):
+                # 获取上下文
+                start = max(0, match.start() - 50)
+                end = min(len(mm), match.end() + 50)
+                context = mm[start:end]
+                print(f"[+] Found at {match.start()}: {context}")
+        
+        mm.close()
+
+# 搜索常见 flag 格式
+patterns = [
+    rb'flag\{[^}]+\}',
+    rb'ctf\{[^}]+\}',
+    rb'FLAG\{[^}]+\}',
+    rb'[A-Za-z0-9+/]{20,}={0,2}',  # Base64
+]
+
+search_memory('memory.raw', patterns)
+```
+
+### 文件提取 (使用 foremost/binwalk)
+
+```bash
+# 使用 foremost 提取文件
+foremost -i memory.raw -o output/
+
+# 使用 binwalk 提取
+binwalk -e memory.raw
+
+# 或者简单的文件签名搜索
+grep -obUaP '\x89PNG' memory.raw  # PNG 文件
+grep -obUaP '\xff\xd8\xff' memory.raw  # JPEG 文件
+grep -obUaP 'PK\x03\x04' memory.raw  # ZIP 文件
+```
+
+### 在线工具
+
+```yaml
+内存分析:
+  - 暂无成熟的在线 Volatility 替代
+  - 可以下载 Volatility Standalone 版本
+  - 使用 Docker: docker run -v $(pwd):/data remnux/volatility3
+
+辅助工具:
+  - https://www.hybrid-analysis.com/ - 恶意软件分析
+  - bulk_extractor - 批量提取（下载安装）
+```
+
+### Windows 环境
+
+```powershell
+# 使用 Select-String 搜索
+$content = [System.IO.File]::ReadAllBytes("memory.raw")
+$text = [System.Text.Encoding]::ASCII.GetString($content)
+$text | Select-String -Pattern "flag\{" -AllMatches
+
+# 或使用 Python
+python -c "import re; print(re.findall(b'flag\{[^}]+\}', open('memory.raw','rb').read()))"
+```
+
 ## 脚本参考
 
 - `scripts/volatility_auto.py` - 自动化分析
